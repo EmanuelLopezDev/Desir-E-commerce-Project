@@ -1,0 +1,247 @@
+<section class="hero-desir">
+
+  <div class="hero-desir__media">
+
+    {% if section.settings.media_type == 'video' and section.settings.video != blank %}
+
+      {{
+        section.settings.video
+        | video_tag:
+        autoplay: true,
+        loop: true,
+        muted: true,
+        controls: false,
+        playsinline: true,
+        class: 'hero-desir__video'
+      }}
+
+    {% elsif section.settings.media_type == 'image' and section.settings.image != blank %}
+
+      <img
+        src="{{ section.settings.image | image_url: width: 1800 }}"
+        alt="{{ section.settings.title }}"
+      >
+
+    {% endif %}
+
+    <div class="hero-desir__overlay"></div>
+
+  </div>
+
+  <div class="hero-desir__content">
+    {% if section.settings.title != blank %}
+      <h1 class="hero-desir__title">{{ section.settings.title }}</h1>
+    {% endif %}
+
+    {% if section.settings.subtitle != blank %}
+      <p class="hero-desir__subtitle">{{ section.settings.subtitle }}</p>
+    {% endif %}
+
+    {% if section.settings.button_text != blank and section.settings.button_link != blank %}
+      <a href="{{ section.settings.button_link }}" class="hero-desir__btn">
+        {{ section.settings.button_text }}
+      </a>
+    {% endif %}
+  </div>
+
+</section>
+
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400;1,600&family=Jost:wght@300;400;500&display=swap');
+
+.hero-desir {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  min-height: 600px;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 80px;
+}
+
+/* MEDIA */
+.hero-desir__media {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-desir__media img,
+.hero-desir__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  display: block;
+}
+
+/* OVERLAY */
+.hero-desir__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0,0,0,0) 30%,
+    rgba(10,4,4,0.55) 80%,
+    rgba(14,10,10,0.75) 100%
+  );
+  z-index: 1;
+}
+
+/* CONTENIDO */
+.hero-desir__content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.hero-desir__title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 72px;
+  font-weight: 400;
+  font-style: italic;
+  color: #f5eeea;
+  line-height: 1.1;
+  margin: 0;
+  text-shadow:
+    0 2px 20px rgba(0,0,0,0.4),
+    0 0 60px rgba(200,145,58,0.12);
+}
+
+.hero-desir__subtitle {
+  font-family: 'Jost', sans-serif;
+  font-size: 14px;
+  font-weight: 300;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(240,232,228,0.75);
+  margin: 0;
+}
+
+/* BOTÓN */
+.hero-desir__btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 16px 48px;
+  background: linear-gradient(145deg, #1a1010, #130c0c);
+  color: #f0e8e4;
+  text-decoration: none;
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  border-radius: 50px;
+  border: 1px solid rgba(200,145,58,0.35);
+  box-shadow:
+    0 8px 30px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(200,145,58,0.15);
+  transition: all 0.35s ease;
+}
+
+.hero-desir__btn:hover {
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  border-color: rgba(200,145,58,0.55);
+  color: #fff;
+  transform: translateY(-3px);
+  box-shadow:
+    0 14px 40px rgba(161,18,42,0.4),
+    0 0 20px rgba(200,145,58,0.15);
+  letter-spacing: 3px;
+}
+
+@media (max-width: 768px) {
+  .hero-desir {
+    height: 50vh;
+    min-height: 300px;
+    padding-bottom: 40px;
+    align-items: flex-end;
+  }
+
+  .hero-desir__title {
+    font-size: 38px;
+  }
+
+  .hero-desir__subtitle {
+    font-size: 11px;
+    letter-spacing: 2px;
+  }
+
+  .hero-desir__btn {
+    padding: 13px 34px;
+    font-size: 11px;
+  }
+}
+
+</style>
+
+{% schema %}
+{
+  "name": "Hero Premium",
+  "settings": [
+    {
+      "type": "select",
+      "id": "media_type",
+      "label": "Tipo",
+      "options": [
+        {
+          "value": "image",
+          "label": "Imagen"
+        },
+        {
+          "value": "video",
+          "label": "Video"
+        }
+      ],
+      "default": "image"
+    },
+    {
+      "type": "image_picker",
+      "id": "image",
+      "label": "Imagen de fondo",
+      "visible_if": "{{ section.settings.media_type == 'image' }}"
+    },
+    {
+      "type": "video",
+      "id": "video",
+      "label": "Video de fondo",
+      "visible_if": "{{ section.settings.media_type == 'video' }}"
+    },
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Título",
+      "default": "Désir"
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "label": "Subtítulo",
+      "default": "Nueva colección"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Texto del botón",
+      "default": "Comprar ahora"
+    },
+    {
+      "type": "url",
+      "id": "button_link",
+      "label": "Enlace del botón"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Hero Premium"
+    }
+  ]
+}
+{% endschema %}
