@@ -65,4 +65,4 @@ Este repositorio no representa el tema completo de la tienda, sino una selecció
 
 **Emanuel López García**
 Desarrollador de Software
-[Agrega aquí tu correo o LinkedIn si quieres]
+
