@@ -1,0 +1,399 @@
+{% comment %}
+============================================================
+  PREGUNTAS FRECUENTES (FAQ) — Acordeón interactivo
+============================================================
+  Descripción:
+  Sección de Shopify tipo acordeón para preguntas frecuentes.
+  Cada pregunta se expande/contrae al hacer clic, con
+  transición suave de altura y opacidad. Solo una pregunta
+  puede estar abierta a la vez (acordeón exclusivo). Las
+  preguntas aparecen con una animación de entrada escalonada
+  (fade-in con delay progresivo) al cargar la página.
+
+  Tecnologías: Liquid, JavaScript (vanilla), CSS3
+  (animaciones, transiciones, keyframes), Shopify Schema con
+  bloques repetibles (blocks) para agregar preguntas
+  ilimitadas desde el editor de temas (hasta 12).
+
+  Puntos técnicos destacados:
+    - Acordeón exclusivo: al abrir una pregunta, JS cierra
+      automáticamente cualquier otra que estuviera abierta.
+    - Animación de entrada escalonada usando selectores
+      :nth-child() con distintos animation-delay.
+    - Transición de max-height + opacity para simular una
+      apertura fluida sin usar librerías externas.
+============================================================
+{% endcomment %}
+
+<section class="faq-luxury-compact">
+  <div class="faq-container">
+
+    <div class="faq-header">
+      <span class="faq-eyebrow">Resolvemos tus dudas</span>
+      <h2>{{ section.settings.title }}</h2>
+      <div class="faq-header-line"></div>
+      <p>{{ section.settings.subtitle }}</p>
+    </div>
+
+    <div class="faq-items">
+      {% for block in section.blocks %}
+        <div class="faq-item" {{ block.shopify_attributes }}>
+          <button class="faq-question">
+            <span>{{ block.settings.question }}</span>
+            <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <div class="faq-answer-inner">
+              <p>{{ block.settings.answer }}</p>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+
+    {% if section.settings.button_text != blank %}
+      <div class="faq-bottom">
+        <a href="{{ section.settings.button_link }}" class="faq-btn">
+          {{ section.settings.button_text }}
+        </a>
+      </div>
+    {% endif %}
+
+  </div>
+
+  <div class="faq-orb faq-orb--1"></div>
+
+</section>
+
+{% comment %}
+  Lógica del acordeón: al hacer clic en una pregunta, primero
+  cierra cualquier otra pregunta abierta (quitando la clase
+  "active" de todos los ítems excepto el actual), y luego
+  alterna (toggle) la clase "active" del ítem clickeado.
+{% endcomment %}
+<script>
+document.querySelectorAll('.faq-luxury-compact .faq-question').forEach(button => {
+  button.addEventListener('click', () => {
+    const currentItem = button.parentElement;
+
+    document.querySelectorAll('.faq-luxury-compact .faq-item').forEach(item => {
+      if (item !== currentItem) item.classList.remove('active');
+    });
+
+    currentItem.classList.toggle('active');
+  });
+});
+</script>
+
+{% schema %}
+{
+  "name": "PREGUNTAS FRECUENTES NEW",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Título",
+      "default": "Preguntas frecuentes"
+    },
+    {
+      "type": "text",
+      "id": "subtitle",
+      "label": "Subtítulo",
+      "default": "Estamos aquí para asesorarte"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Texto del botón",
+      "default": "¿Tienes más dudas?"
+    },
+    {
+      "type": "url",
+      "id": "button_link",
+      "label": "Enlace del botón"
+    }
+  ],
+  "blocks": [
+    {
+      "type": "faq",
+      "name": "Pregunta",
+      "settings": [
+        {
+          "type": "text",
+          "id": "question",
+          "label": "Pregunta"
+        },
+        {
+          "type": "textarea",
+          "id": "answer",
+          "label": "Respuesta"
+        }
+      ]
+    }
+  ],
+  "max_blocks": 12,
+  "presets": [
+    {
+      "name": "PREGUNTAS FRECUENTES NEW"
+    }
+  ]
+}
+{% endschema %}
+
+{% comment %}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Jost:wght@300;400;500;600&display=swap');
+
+.faq-luxury-compact {
+  padding: 80px 20px;
+  background: #0e0a0a;
+  position: relative;
+  overflow: hidden;
+}
+
+.faq-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.faq-orb--1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(ellipse, rgba(161,18,42,0.1) 0%, transparent 70%);
+  top: -200px;
+  left: -150px;
+}
+
+.faq-container {
+  position: relative;
+  z-index: 2;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.faq-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.faq-eyebrow {
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  font-size: 10px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #c8913a;
+  display: block;
+  margin-bottom: 14px;
+}
+
+.faq-header h2 {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 48px;
+  font-weight: 400;
+  font-style: italic;
+  color: #f5eeea;
+  margin-bottom: 18px;
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 40px rgba(200,145,58,0.15);
+}
+
+.faq-header-line {
+  width: 500px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #c8913a, transparent);
+  margin: 0 auto 16px;
+}
+
+.faq-header p {
+  font-family: 'Jost', sans-serif;
+  font-size: 14px;
+  font-weight: 300;
+  color: rgba(240,232,228,0.5);
+  letter-spacing: 0.3px;
+}
+
+.faq-item {
+  margin-bottom: 14px;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(200,145,58,0.18);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
+
+  opacity: 0;
+  animation: faqFadeIn 0.5s ease forwards;
+}
+
+.faq-item:nth-child(1)  { animation-delay: 0.05s; }
+.faq-item:nth-child(2)  { animation-delay: 0.10s; }
+.faq-item:nth-child(3)  { animation-delay: 0.15s; }
+.faq-item:nth-child(4)  { animation-delay: 0.20s; }
+.faq-item:nth-child(5)  { animation-delay: 0.25s; }
+.faq-item:nth-child(6)  { animation-delay: 0.30s; }
+.faq-item:nth-child(7)  { animation-delay: 0.35s; }
+.faq-item:nth-child(8)  { animation-delay: 0.40s; }
+
+@keyframes faqFadeIn {
+  to { opacity: 1; }
+}
+
+.faq-item:hover {
+  border-color: rgba(200,145,58,0.38);
+  box-shadow:
+    0 12px 35px rgba(0,0,0,0.45),
+    0 0 0 1px rgba(200,145,58,0.12),
+    0 0 20px rgba(200,145,58,0.08);
+}
+
+.faq-item.active {
+  border-color: rgba(200,145,58,0.45);
+  box-shadow:
+    0 16px 45px rgba(0,0,0,0.5),
+    0 0 0 1px rgba(200,145,58,0.2),
+    0 0 30px rgba(161,18,42,0.1);
+}
+
+.faq-question {
+  width: 100%;
+  background: linear-gradient(145deg, #1a1010, #130c0c);
+  border: none;
+  padding: 22px 28px;
+  font-family: 'Jost', sans-serif;
+  font-size: 15px;
+  font-weight: 500;
+  color: #f0e8e4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.3s ease, color 0.3s ease;
+  letter-spacing: 0.2px;
+}
+
+.faq-question:hover {
+  background: linear-gradient(145deg, #1f1212, #180e0e);
+  color: #fff;
+}
+
+.faq-item.active .faq-question {
+  background: linear-gradient(145deg, #200d0d, #1a0909);
+  color: #f5eeea;
+}
+
+.faq-icon {
+  font-size: 20px;
+  color: #c8913a;
+  transition: transform 0.35s ease, color 0.35s ease;
+  flex-shrink: 0;
+  margin-left: 16px;
+  line-height: 1;
+}
+
+.faq-item.active .faq-icon {
+  transform: rotate(45deg);
+  color: #A1122A;
+}
+
+.faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.45s ease, opacity 0.3s ease;
+  opacity: 0;
+}
+
+.faq-answer-inner {
+  background: linear-gradient(145deg, #130c0c, #0e0808);
+  border-top: 1px solid rgba(200,145,58,0.12);
+  padding: 20px 28px 24px;
+}
+
+.faq-answer-inner p {
+  font-family: 'Jost', sans-serif;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.75;
+  color: rgba(240,232,228,0.65);
+  letter-spacing: 0.2px;
+}
+
+.faq-item.active .faq-answer {
+  max-height: 400px;
+  opacity: 1;
+}
+
+.faq-bottom {
+  text-align: center;
+  margin-top: 50px;
+}
+
+.faq-btn {
+  display: inline-block;
+  padding: 14px 40px;
+  border-radius: 50px;
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  color: #fff;
+  font-family: 'Jost', sans-serif;
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid rgba(200,145,58,0.28);
+  transition: all 0.3s ease;
+  box-shadow: 0 10px 25px rgba(161,18,42,0.3);
+}
+
+.faq-btn:hover {
+  background: linear-gradient(135deg, rgb(161,18,42), rgb(200,26,26));
+  transform: translateY(-3px);
+  border-color: rgba(200,145,58,0.55);
+  box-shadow:
+    0 16px 35px rgba(161,18,42,0.4),
+    0 0 18px rgba(200,145,58,0.15);
+  letter-spacing: 2.2px;
+}
+
+@media (max-width: 768px) {
+
+  .faq-luxury-compact {
+    padding: 55px 16px;
+  }
+
+  .faq-header h2 {
+    font-size: 32px;
+  }
+
+  .faq-question {
+    font-size: 14px;
+    padding: 18px 20px;
+    text-align: left;
+  }
+
+  .faq-question span:first-child {
+    text-align: left;
+    flex: 1;
+  }
+
+  .faq-answer-inner {
+    padding: 16px 20px 20px;
+    text-align: left;
+  }
+
+  .faq-answer-inner p {
+    text-align: left;
+  }
+
+  .faq-header-line {
+    width: 260px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #c8913a, transparent);
+    margin: 0 auto 16px;
+  }
+
+}
+</style>
+{% endcomment %}
