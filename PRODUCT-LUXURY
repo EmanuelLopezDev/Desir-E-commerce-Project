@@ -1,0 +1,964 @@
+{% comment %}
+============================================================
+  PRODUCT LUXURY — Página de producto con lógica dinámica
+  de variantes, stock e integración AJAX con el carrito
+============================================================
+  Descripción:
+  Plantilla de página de producto para Shopify con galería
+  de imágenes (imagen principal + miniaturas clickeables),
+  selector de variantes (talla/color) sincronizado con
+  JavaScript, badge de stock en tiempo real (disponible /
+  pocas unidades / agotado), botón de "agregar al carrito"
+  mediante AJAX (sin recargar la página), y botón de
+  WhatsApp de confianza para resolver dudas antes de comprar.
+
+  Tecnologías: Liquid, JavaScript (vanilla, Fetch API),
+  CSS3 (animaciones, responsive, grid layout), Shopify
+  Object Model (product, variants, options), Shopify
+  Cart AJAX API (/cart/add.js, /cart.js).
+
+  Puntos técnicos destacados:
+    - Inyección de datos de Shopify (variantes, disponibilidad,
+      inventario) desde Liquid a un array de JavaScript para
+      manipularlos del lado del cliente sin nuevas peticiones.
+    - Sincronización de selección de variante (radio buttons)
+      con el precio, disponibilidad y stock mostrado, sin
+      recargar la página.
+    - Uso de Fetch API para agregar productos al carrito de
+      forma asíncrona, con manejo de estados de carga, éxito
+      y error.
+    - Emisión de un evento personalizado (CustomEvent) para
+      notificar al resto del tema (Shopify Horizon) que el
+      carrito cambió, y actualización manual de contadores
+      de carrito en el header como respaldo.
+    - Ajuste automático del máximo de cantidad disponible
+      según el inventario real de la variante seleccionada.
+============================================================
+{% endcomment %}
+
+<section class="luxury-product">
+
+  <div class="luxury-container">
+
+    <div class="luxury-image-wrapper">
+      <div class="luxury-image">
+        <img id="mainProductImage"
+             src="{{ product.featured_image | image_url: width: 900 }}"
+             alt="{{ product.title }}">
+      </div>
+      <div class="luxury-thumbnails">
+        {% for image in product.images %}
+            <img src="{{ image | image_url: width: 200 }}"
+                data-large="{{ image | image_url: width: 900 }}"
+                class="thumbnail"
+                onclick="changeImage(this)"
+                alt="">
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="luxury-info">
+
+      <div class="luxury-stock-badge" id="stockBadge">
+        <span class="stock-dot" id="stockDot"></span>
+        <span id="stockText">Cargando...</span>
+      </div>
+
+      <span class="luxury-eyebrow">Colección DÉSIR</span>
+      <h1 class="luxury-title">{{ product.title }}</h1>
+
+      <div class="luxury-price-wrapper">
+        {% if product.compare_at_price > product.price %}
+            <span class="luxury-compare-price">{{ product.compare_at_price | money }}</span>
+        {% endif %}
+        <span class="luxury-price">{{ product.price | money }}</span>
+      </div>
+
+      <div class="luxury-divider"></div>
+
+      {% form 'product', product %}
+
+        <input type="hidden" name="id" value="{{ product.selected_or_first_available_variant.id }}">
+
+        {% unless product.has_only_default_variant %}
+          {% for option in product.options_with_values %}
+            <div class="luxury-option">
+              <label class="luxury-option-title">{{ option.name }}</label>
+              <div class="luxury-variants">
+                {% for value in option.values %}
+                  <label class="variant-button">
+                    <input type="radio"
+                           name="options[{{ option.name }}]"
+                           value="{{ value }}"
+                           {% if option.selected_value == value %}checked{% endif %}>
+                    <span>{{ value }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+            </div>
+          {% endfor %}
+        {% endunless %}
+
+        <div class="luxury-quantity">
+          <input type="number" name="quantity" id="quantityInput" value="1" min="1" step="1">
+        </div>
+
+        <div class="luxury-no-stock-msg" id="noStockMsg">
+          En este momento no tenemos el producto disponible en esta variante.
+        </div>
+
+        <div class="luxury-cart-message"></div>
+
+        <div class="luxury-buttons">
+          <button type="submit" name="add" class="luxury-btn-primary" id="addToCartBtn">
+            Agregar al carrito
+          </button>
+          <div class="luxury-buy-now" id="buyNowWrapper">
+            {{ form | payment_button }}
+          </div>
+        </div>
+
+      {% endform %}
+
+      <a href="https://wa.me/{{ section.settings.whatsapp_number }}"
+         target="_blank"
+         class="luxury-whatsapp-trust">
+        <span class="lwt-icon">
+          <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+            <path fill="currentColor" d="M16.04 2c-7.73 0-14 6.27-14 14 0 2.6.71 5.04 1.94 7.13L2 30l6.99-1.93c2.02 1.13 4.36 1.79 6.85 1.79h.01c7.73 0 14-6.27 14-14s-6.27-13.86-13.8-13.86zm0 25.6c-2.27 0-4.4-.62-6.22-1.78l-.45-.27-4.63 1.28 1.24-4.51-.29-.46a11.6 11.6 0 0 1-1.78-6.22c0-6.41 5.22-11.62 11.63-11.62 6.41 0 11.63 5.21 11.63 11.62 0 6.41-5.22 11.62-11.63 11.96zm6.43-8.71c-.35-.18-2.08-1.03-2.4-1.14-.32-.12-.56-.18-.79.18-.23.35-.91 1.14-1.12 1.37-.21.23-.41.26-.76.09-2.05-1.03-3.39-1.83-4.74-4.16-.36-.62.36-.58.99-1.93.11-.23.05-.42-.06-.6-.11-.18-.79-1.9-1.08-2.54-.29-.62-.59-.53-.81-.54-.21-.01-.45-.01-.69-.01-.24 0-.62.09-.95.45-.32.35-1.24 1.21-1.24 2.95 0 1.74 1.27 3.42 1.45 3.66.18.23 2.46 3.78 6.04 5.14 3.58 1.36 3.58.91 4.23.85.65-.06 2.08-.85 2.37-1.67.29-.82.29-1.52.2-1.67-.09-.15-.32-.24-.67-.42z"/>
+          </svg>
+        </span>
+        <span class="lwt-text">{{ section.settings.whatsapp_message }}</span>
+        <span class="lwt-arrow">›</span>
+      </a>
+
+      <div class="luxury-description">
+        {{ product.description }}
+      </div>
+
+    </div>
+
+  </div>
+
+  <div class="lp-orb lp-orb--1"></div>
+
+</section>
+
+<style>
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;1,400;1,600&family=Jost:wght@300;400;500;600&family=Cinzel:wght@400;600&display=swap');
+
+.luxury-product {
+  background: #0e0a0a;
+  padding: 150px 40px 80px;
+  position: relative;
+  overflow: hidden;
+  animation: fadeIn 0.8s ease forwards;
+}
+
+.lp-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.lp-orb--1 {
+  width: 700px;
+  height: 700px;
+  background: radial-gradient(ellipse, rgba(161,18,42,0.1) 0%, transparent 70%);
+  top: -200px;
+  left: -150px;
+}
+
+.luxury-container {
+  position: relative;
+  z-index: 2;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 80px;
+  align-items: start;
+}
+
+.luxury-image-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.luxury-image {
+  background: linear-gradient(145deg, #1a1010, #130c0c);
+  padding: 30px;
+  border-radius: 35px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid rgba(200,145,58,0.2);
+  box-shadow:
+    0 30px 80px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(200,145,58,0.15);
+  position: relative;
+  overflow: hidden;
+}
+
+.luxury-image::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,145,58,0.5), transparent);
+}
+
+.luxury-image img {
+  width: 85%;
+  border-radius: 25px;
+  box-shadow:
+    0 40px 80px rgba(0,0,0,0.5),
+    0 0 30px rgba(161,18,42,0.15);
+  transition: 0.4s ease;
+  filter: drop-shadow(0 20px 40px rgba(161,18,42,0.2));
+}
+
+.luxury-image img:hover {
+  transform: translateY(-15px);
+  filter: drop-shadow(0 30px 50px rgba(161,18,42,0.3));
+}
+
+.luxury-thumbnails {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.thumbnail {
+  width: 80px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: 0.3s ease;
+  border: 1px solid rgba(200,145,58,0.15);
+  opacity: 0.7;
+}
+
+.thumbnail:hover {
+  transform: translateY(-5px);
+  border-color: rgba(200,145,58,0.5);
+  opacity: 1;
+  box-shadow:
+    0 8px 20px rgba(0,0,0,0.4),
+    0 0 0 1px rgba(200,145,58,0.2),
+    0 0 12px rgba(200,145,58,0.15);
+}
+
+.luxury-info {
+  background: linear-gradient(145deg, #1a1010, #130c0c);
+  padding: 45px;
+  border-radius: 30px;
+  border: 1px solid rgba(200,145,58,0.22);
+  box-shadow:
+    0 20px 60px rgba(0,0,0,0.5),
+    inset 0 1px 0 rgba(200,145,58,0.15),
+    inset 0 0 60px rgba(161,18,42,0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.luxury-info::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,145,58,0.55), transparent);
+}
+
+.luxury-info::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #A1122A, #c8913a, #A1122A, transparent);
+  opacity: 0.5;
+}
+
+.luxury-stock-badge {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  background: rgba(14,10,10,0.75);
+  border: 1px solid rgba(200,145,58,0.2);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: rgba(240,232,228,0.75);
+  letter-spacing: 0.3px;
+  backdrop-filter: blur(6px);
+  transition: all 0.4s ease;
+  z-index: 10;
+}
+
+.stock-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4caf7d;
+  box-shadow: 0 0 6px rgba(76,175,125,0.7);
+  transition: all 0.4s ease;
+  flex-shrink: 0;
+}
+
+.stock-dot.out {
+  background: #A1122A;
+  box-shadow: 0 0 6px rgba(161,18,42,0.7);
+}
+
+.stock-dot.low {
+  background: #c8913a;
+  box-shadow: 0 0 6px rgba(200,145,58,0.7);
+}
+
+.luxury-eyebrow {
+  font-family: 'Jost', sans-serif;
+  font-weight: 300;
+  font-size: 10px;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #c8913a;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.luxury-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 42px;
+  font-weight: 400;
+  font-style: italic;
+  margin-bottom: 16px;
+  color: #f5eeea;
+  text-shadow: 0 0 40px rgba(200,145,58,0.15);
+  line-height: 1.15;
+}
+
+.luxury-price-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 25px;
+}
+
+.luxury-compare-price {
+  text-decoration: line-through;
+  color: rgba(240,232,228,0.3);
+  font-family: 'Jost', sans-serif;
+  font-size: 17px;
+  font-weight: 300;
+}
+
+.luxury-price {
+  font-family: 'Jost', sans-serif;
+  font-size: 28px;
+  color: #e8c97a;
+  font-weight: 600;
+  text-shadow: 0 0 14px rgba(200,145,58,0.4);
+}
+
+.luxury-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,145,58,0.3), rgba(161,18,42,0.3), rgba(200,145,58,0.3), transparent);
+  margin: 28px 0;
+}
+
+.luxury-option-title {
+  font-family: 'Jost', sans-serif;
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-size: 11px;
+  margin-bottom: 12px;
+  display: block;
+  color: #c8913a;
+}
+
+.luxury-option { margin-bottom: 28px; }
+
+.luxury-variants {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.variant-button { cursor: pointer; }
+.variant-button input { display: none; }
+
+.variant-button span {
+  display: inline-block;
+  padding: 10px 22px;
+  border-radius: 30px;
+  border: 1px solid rgba(200,145,58,0.25);
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  color: #f0e8e4;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  transition: 0.3s ease;
+}
+
+.variant-button:hover span {
+  transform: translateY(-3px);
+  border-color: rgba(200,145,58,0.5);
+  box-shadow: 0 8px 20px rgba(161,18,42,0.3), 0 0 12px rgba(200,145,58,0.1);
+}
+
+.variant-button input:checked + span {
+  background: linear-gradient(135deg, #1a1010, #2a1515);
+  color: #c8913a;
+  border-color: rgba(200,145,58,0.6);
+  box-shadow: 0 0 0 1px rgba(200,145,58,0.3), 0 0 15px rgba(200,145,58,0.1);
+}
+
+.luxury-quantity input {
+  width: 80px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(200,145,58,0.2);
+  background: linear-gradient(145deg, #1f1212, #180e0e);
+  color: #f0e8e4;
+  font-family: 'Jost', sans-serif;
+  font-size: 14px;
+  margin: 22px 0;
+  outline: none;
+  transition: border-color 0.3s ease;
+}
+
+.luxury-quantity input:focus {
+  border-color: rgba(200,145,58,0.45);
+  box-shadow: 0 0 10px rgba(200,145,58,0.1);
+}
+
+.luxury-no-stock-msg {
+  display: none;
+  background: rgba(161,18,42,0.08);
+  border: 1px solid rgba(161,18,42,0.3);
+  border-radius: 12px;
+  padding: 14px 18px;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  font-weight: 300;
+  color: rgba(240,180,180,0.85);
+  letter-spacing: 0.3px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.luxury-buttons {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.luxury-buttons button,
+.luxury-buttons .shopify-payment-button {
+  flex: 1;
+}
+
+.luxury-btn-primary,
+.shopify-payment-button__button {
+  width: 100%;
+  height: 62px;
+  padding: 0 20px;
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  color: #f5eeea;
+  border: 1px solid rgba(200,145,58,0.25);
+  border-radius: 40px;
+  font-family: 'Cinzel', serif !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 3.5px !important;
+  text-transform: uppercase !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 25px rgba(161,18,42,0.3);
+  text-shadow: 0 0 18px rgba(200,145,58,0.35);
+}
+
+.luxury-btn-primary:hover,
+.shopify-payment-button__button:hover {
+  transform: translateY(-4px);
+  background: linear-gradient(135deg, rgb(161,18,42), rgb(200,26,26));
+  border-color: rgba(200,145,58,0.5);
+  box-shadow: 0 16px 40px rgba(161,18,42,0.45), 0 0 20px rgba(200,145,58,0.15);
+  letter-spacing: 4px !important;
+  color: #e8c97a;
+  text-shadow: 0 0 22px rgba(200,145,58,0.55);
+}
+
+.luxury-btn-primary:disabled,
+.luxury-btn-primary.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none !important;
+  box-shadow: none !important;
+  letter-spacing: 3.5px !important;
+}
+
+.shopify-payment-button__button--hidden {
+  display: none !important;
+}
+
+/* ---- Mensaje de confianza WhatsApp ---- */
+.luxury-whatsapp-trust {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 22px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(37,211,102,0.07), rgba(19,12,12,0.4));
+  border: 1px solid rgba(76,175,125,0.25);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.luxury-whatsapp-trust::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(76,175,125,0.4), transparent);
+}
+
+.luxury-whatsapp-trust:hover {
+  border-color: rgba(76,175,125,0.5);
+  background: linear-gradient(145deg, rgba(37,211,102,0.12), rgba(19,12,12,0.5));
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(0,0,0,0.3), 0 0 18px rgba(76,175,125,0.1);
+}
+
+.lwt-icon {
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(145deg, #2bd966, #1faa50);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.3), inset 0 -2px 4px rgba(0,0,0,0.15);
+}
+
+.lwt-icon svg {
+  width: 19px;
+  height: 19px;
+  color: #ffffff;
+}
+
+.lwt-text {
+  flex: 1;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: rgba(240,232,228,0.85);
+  letter-spacing: 0.2px;
+}
+
+.lwt-arrow {
+  font-family: 'Jost', sans-serif;
+  font-size: 20px;
+  color: rgba(76,175,125,0.6);
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.luxury-whatsapp-trust:hover .lwt-arrow {
+  transform: translateX(4px);
+  color: rgba(76,175,125,0.9);
+}
+
+.luxury-description {
+  margin-top: 40px;
+  padding: 28px;
+  border: 1px solid rgba(200,145,58,0.2);
+  border-radius: 18px;
+  background: linear-gradient(145deg, #130c0c, #0e0808);
+  font-family: 'Jost', sans-serif;
+  font-size: 14px;
+  font-weight: 300;
+  line-height: 1.75;
+  color: rgba(240,232,228,0.65);
+  letter-spacing: 0.2px;
+}
+
+.luxury-cart-message {
+  margin: 15px 0;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-family: 'Jost', sans-serif;
+  font-size: 13px;
+  display: none;
+  transition: all 0.3s ease;
+}
+
+.luxury-cart-message.success {
+  background: rgba(26,127,55,0.12);
+  color: #4caf7d;
+  border: 1px solid rgba(26,127,55,0.25);
+}
+
+.luxury-cart-message.error {
+  background: rgba(161,18,42,0.1);
+  color: #f08080;
+  border: 1px solid rgba(161,18,42,0.25);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 768px) {
+
+  .luxury-product { padding: 100px 0px 30px; }
+
+  .luxury-container {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .luxury-image { padding: 18px; border-radius: 22px; }
+  .luxury-image img { width: 70%; }
+  .luxury-thumbnails { gap: 8px; margin-top: 12px; }
+  .thumbnail { width: 55px; border-radius: 8px; }
+
+  .luxury-info { padding: 20px; border-radius: 18px; }
+
+  .luxury-stock-badge {
+    top: 14px;
+    right: 14px;
+    font-size: 10px;
+    padding: 5px 11px;
+  }
+
+  .luxury-title { font-size: 26px; margin-bottom: 8px; }
+  .luxury-price { font-size: 18px; }
+  .luxury-compare-price { font-size: 13px; }
+  .luxury-divider { margin: 14px 0; }
+  .luxury-option { margin-bottom: 14px; }
+  .luxury-option-title { font-size: 10px; }
+
+  .variant-button span { padding: 7px 14px; font-size: 12px; }
+
+  .luxury-quantity { margin: 8px 0; }
+  .luxury-quantity input { width: 65px; padding: 7px 10px; }
+
+  .luxury-buttons { flex-direction: column; gap: 14px; }
+  .luxury-buttons form { width: 100% !important; margin: 0 !important; }
+
+  .luxury-buttons form button,
+  .luxury-btn-primary {
+    width: 100% !important;
+    height: 50px !important;
+    min-height: 50px !important;
+    padding: 0 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 40px !important;
+  }
+
+  .shopify-payment-button { width: 100% !important; }
+
+  .shopify-payment-button__button {
+    width: 100% !important;
+    height: 50px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border-radius: 40px !important;
+  }
+
+  .luxury-whatsapp-trust {
+    margin-top: 16px;
+    padding: 13px 16px;
+    border-radius: 14px;
+  }
+
+  .lwt-icon { width: 32px; height: 32px; }
+  .lwt-icon svg { width: 16px; height: 16px; }
+  .lwt-text { font-size: 12px; }
+
+  .luxury-description { padding: 16px; font-size: 13px; margin-top: 18px; }
+}
+
+</style>
+
+<script>
+function changeImage(element) {
+  var main = document.getElementById("mainProductImage");
+  if (main && element) {
+    main.src = element.getAttribute("data-large") || element.src;
+  }
+}
+window.changeImage = changeImage;
+</script>
+
+<script>
+(function () {
+
+  document.addEventListener("DOMContentLoaded", function () {
+
+    const form          = document.querySelector(".luxury-info form");
+    if (!form) return;
+
+    const messageBox    = document.querySelector(".luxury-cart-message");
+    const variantInput  = form.querySelector('input[name="id"]');
+    const quantityInput = document.getElementById("quantityInput");
+    const addToCartBtn  = document.getElementById("addToCartBtn");
+    const buyNowWrapper = document.getElementById("buyNowWrapper");
+    const noStockMsg    = document.getElementById("noStockMsg");
+    const stockDot      = document.getElementById("stockDot");
+    const stockText     = document.getElementById("stockText");
+
+    const variants = [
+      {% for variant in product.variants %}
+        {
+          "id": {{ variant.id }},
+          "available": {{ variant.available }},
+          "options": {{ variant.options | json }},
+          "inventory_quantity": {{ variant.inventory_quantity }},
+          "inventory_management": {{ variant.inventory_management | json }}
+        }{% unless forloop.last %},{% endunless %}
+      {% endfor %}
+    ];
+
+    /* ---- Corregir cantidad solo al salir del campo ---- */
+    if (quantityInput) {
+      quantityInput.addEventListener("blur", function () {
+        let val   = parseInt(this.value);
+        const max = parseInt(this.max);
+        if (isNaN(val) || val < 1) val = 1;
+        if (this.max !== "" && !isNaN(max) && val > max) val = max;
+        this.value = val;
+      });
+    }
+
+    /* ---- Badge de stock + ajuste inmediato de cantidad ---- */
+    function updateStockBadge(variant) {
+      if (!variant) {
+        stockDot.className = "stock-dot out";
+        stockText.textContent = "Sin variante";
+        return;
+      }
+
+      const qty      = variant.inventory_quantity;
+      const policy   = variant.inventory_management;
+      const available= variant.available;
+
+      if (policy === "shopify" && qty > 0) {
+        quantityInput.setAttribute("max", qty);
+        const currentQty = parseInt(quantityInput.value);
+        if (!isNaN(currentQty) && currentQty > qty) {
+          quantityInput.value = qty;
+        }
+      } else {
+        quantityInput.removeAttribute("max");
+      }
+
+      if (!available || (policy === "shopify" && qty <= 0)) {
+        stockDot.className = "stock-dot out";
+        stockText.textContent = "Agotado";
+        setButtonsDisabled(true);
+      } else if (policy === "shopify" && qty <= 5) {
+        stockDot.className = "stock-dot low";
+        stockText.textContent = "Últimas " + qty + " unidades";
+        setButtonsDisabled(false);
+      } else if (policy === "shopify") {
+        stockDot.className = "stock-dot";
+        stockText.textContent = qty + " disponibles";
+        setButtonsDisabled(false);
+      } else {
+        stockDot.className = "stock-dot";
+        stockText.textContent = "Disponible";
+        setButtonsDisabled(false);
+      }
+    }
+
+    /* ---- Habilitar / deshabilitar botones ---- */
+    function setButtonsDisabled(disabled) {
+      if (disabled) {
+        addToCartBtn.disabled = true;
+        addToCartBtn.classList.add("disabled");
+        noStockMsg.style.display = "block";
+        if (buyNowWrapper) buyNowWrapper.style.display = "none";
+      } else {
+        addToCartBtn.disabled = false;
+        addToCartBtn.classList.remove("disabled");
+        noStockMsg.style.display = "none";
+        if (buyNowWrapper) buyNowWrapper.style.display = "block";
+      }
+    }
+
+    /* ---- Variante seleccionada ---- */
+    function getSelectedVariant() {
+      const optionBlocks = form.querySelectorAll(".luxury-option");
+      const selected = [];
+      optionBlocks.forEach(block => {
+        const checked = block.querySelector("input:checked");
+        if (checked) selected.push(checked.value);
+      });
+      return variants.find(v =>
+        v.options.every((opt, i) => opt === selected[i])
+      ) || null;
+    }
+
+    function updateVariant() {
+      const matched = getSelectedVariant();
+      if (matched && variantInput) variantInput.value = matched.id;
+      updateStockBadge(matched);
+    }
+
+    form.querySelectorAll("input[type='radio']").forEach(radio => {
+      radio.addEventListener("change", updateVariant);
+    });
+
+    updateVariant();
+
+    /* ---- Mensaje carrito ---- */
+    function showMessage(text, type = "success") {
+      if (!messageBox) return;
+      messageBox.style.display = "block";
+      messageBox.className = "luxury-cart-message " + type;
+      messageBox.innerHTML = text;
+      if (type !== "error") {
+        setTimeout(() => { messageBox.style.display = "none"; }, 5000);
+      }
+    }
+
+    /* ---- Disparar evento nativo de Horizon ---- */
+    function notifyHorizon(cart, variantId) {
+
+      /* Exactamente la misma estructura que usa CartAddEvent en events.js de Horizon */
+      const event = new CustomEvent('cart:update', {
+        bubbles: true,
+        detail: {
+          resource: cart,
+          sourceId: 'luxury-product-form',
+          data: {
+            didError: false,
+            source: 'product-form',
+            itemCount: cart.item_count,
+            variantId: String(variantId)
+          }
+        }
+      });
+
+      /* Horizon escucha este evento en document, igual que hace su CartDrawerComponent */
+      document.dispatchEvent(event);
+
+      /* También actualizar el contador manualmente por si acaso */
+      const selectors = [
+        '[data-testid="cart-bubble"]',
+        '.cart-bubble__text-count',
+        '.cart-count',
+        '.cart-count-bubble',
+        '.cart-item-count',
+        '[data-cart-count]',
+        '.header__cart-count',
+        '[id*="cart-count"]',
+        '[class*="cart-count"]',
+        '[class*="cart-bubble"]'
+      ];
+      selectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+          el.textContent = cart.item_count;
+          if (cart.item_count > 0) {
+            el.style.display = '';
+            el.removeAttribute('hidden');
+            el.classList.remove('hidden', 'is-hidden', 'hide');
+          }
+        });
+      });
+
+      /* Texto accesible */
+      document.querySelectorAll('#cart-bubble-text .visually-hidden, [data-cart-count-text]').forEach(el => {
+        el.textContent = 'Total de artículos en el carrito: ' + cart.item_count;
+      });
+    }
+
+    /* ---- Submit ---- */
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      if (addToCartBtn.disabled) return;
+
+      updateVariant();
+
+      const id  = variantInput.value;
+      let qty   = parseInt(quantityInput.value);
+      if (isNaN(qty) || qty < 1) qty = 1;
+
+      if (!id) {
+        showMessage("Selecciona una variante válida.", "error");
+        return;
+      }
+
+      const button = form.querySelector("button[type='submit']");
+      if (button) { button.disabled = true; button.textContent = "Agregando..."; }
+
+      fetch("/cart/add.js", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ id, quantity: qty })
+      })
+      .then(res => { if (!res.ok) throw new Error("Error"); return fetch("/cart.js"); })
+      .then(res => res.json())
+      .then(cart => {
+        notifyHorizon(cart, id);
+        showMessage('✔ Producto agregado — <a href="/cart" style="color:#4caf7d;font-weight:600;text-decoration:underline;">Ver carrito</a>', "success");
+      })
+      .catch(() => showMessage("Error al agregar el producto. Intenta de nuevo.", "error"))
+      .finally(() => {
+        if (button) { button.disabled = false; button.textContent = "Agregar al carrito"; }
+      });
+    });
+
+  });
+
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Product Luxury",
+  "settings": [
+    {
+      "type": "text",
+      "id": "whatsapp_number",
+      "label": "Número de WhatsApp (con código de país, sin + ni espacios)",
+      "default": "xxxxxxxxxx"
+    },
+    {
+      "type": "textarea",
+      "id": "whatsapp_message",
+      "label": "Mensaje de confianza junto al botón de WhatsApp",
+      "default": "¿Tienes dudas sobre tallas o el producto? Escríbenos por WhatsApp y te ayudamos a elegir con total confianza."
+    }
+  ]
+}
+{% endschema %}
