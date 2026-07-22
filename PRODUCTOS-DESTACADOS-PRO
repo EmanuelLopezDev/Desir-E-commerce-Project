@@ -1,0 +1,530 @@
+{% comment %}
+============================================================
+  PRODUCTOS DESTACADOS PRO — Carrusel de productos Shopify
+============================================================
+  Descripción:
+  Sección de Shopify que muestra un carrusel horizontal de
+  productos destacados, con scroll táctil, botones de
+  navegación (prev/next) controlados por JavaScript, badges
+  flotantes animados para los productos más vendidos, y
+  generación de reseñas simuladas basadas en el ID del
+  producto.
+
+  Estructura del archivo (para referencia, en un tema real
+  cada bloque va en su propio archivo):
+    1. Section   -> sections/custom-product-showcase.liquid
+    2. Snippet    -> snippets/custom-product-card.liquid
+    3. CSS        -> assets/custom-product-showcase.css
+
+  Tecnologías: Liquid, JavaScript (vanilla), CSS3, Shopify
+  Schema (settings configurables desde el editor de temas).
+============================================================
+{% endcomment %}
+
+
+{% comment %} ============================================
+  1. SECTION FILE
+     Archivo principal de la sección. Renderiza el título,
+     el contenedor del carrusel y los productos de la
+     colección seleccionada, usando el snippet de tarjeta
+     de producto para cada uno.
+============================================ {% endcomment %}
+
+{{ 'custom-product-showcase.css' | asset_url | stylesheet_tag }}
+
+<section class="custom-products">
+  <div class="page-width">
+
+    {% if section.settings.title != blank %}
+      <h2 class="custom-products__title">
+        {{ section.settings.title }}
+      </h2>
+    {% endif %}
+
+    <div class="custom-carousel">
+
+      <button class="carousel-btn prev" aria-label="Anterior">‹</button>
+      <button class="carousel-btn next" aria-label="Siguiente">›</button>
+
+      <div class="custom-products__grid">
+        {% for product in section.settings.collection.products limit: section.settings.limit %}
+          {% render 'custom-product-card', product: product, card_index: forloop.index %}
+        {% endfor %}
+      </div>
+
+    </div>
+
+  </div>
+</section>
+
+{% comment %}
+  Lógica del carrusel: calcula el ancho de una tarjeta para
+  desplazar el scroll exactamente ese ancho al hacer clic en
+  los botones prev/next. El botón "prev" se oculta al inicio
+  del scroll y reaparece automáticamente al desplazarse.
+{% endcomment %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+  document.querySelectorAll('.custom-carousel').forEach(carousel => {
+
+    const track = carousel.querySelector('.custom-products__grid');
+    const btnNext = carousel.querySelector('.carousel-btn.next');
+    const btnPrev = carousel.querySelector('.carousel-btn.prev');
+
+    if (!track || !btnNext || !btnPrev) return;
+
+    const card = track.querySelector('.custom-card');
+    if (!card) return;
+
+    const scrollAmount = card.offsetWidth + 14;
+
+    // Ocultar botón izquierdo al inicio
+    btnPrev.style.display = 'none';
+
+    btnNext.addEventListener('click', () => {
+      track.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    });
+
+    btnPrev.addEventListener('click', () => {
+      track.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+    });
+
+    track.addEventListener('scroll', () => {
+      if (track.scrollLeft > 20) {
+        btnPrev.style.display = 'flex';
+      } else {
+        btnPrev.style.display = 'none';
+      }
+    });
+
+  });
+
+});
+</script>
+
+{% schema %}
+{
+  "name": "Productos destacados PRO",
+  "settings": [
+    {
+      "type": "text",
+      "id": "title",
+      "label": "Título",
+      "default": "Nuestros favoritos"
+    },
+    {
+      "type": "collection",
+      "id": "collection",
+      "label": "Colección de productos"
+    },
+    {
+      "type": "range",
+      "id": "limit",
+      "label": "Cantidad de productos",
+      "min": 2,
+      "max": 12,
+      "step": 1,
+      "default": 4
+    }
+  ],
+  "presets": [
+    {
+      "name": "Productos destacados PRO"
+    }
+  ]
+}
+{% endschema %}
+
+
+{% comment %} ============================================
+  2. SNIPPET FILE
+     Tarjeta individual de producto, reutilizada dentro del
+     for-loop de la sección mediante {% render %}. Recibe
+     "product" y "card_index" como parámetros.
+============================================ {% endcomment %}
+
+{% comment %}
+  snippets/custom-product-card.liquid
+{% endcomment %}
+
+<div class="custom-card">
+
+  <div class="custom-image">
+
+    {% comment %} Badge "Más vendidos" solo en los primeros 2 productos {% endcomment %}
+    {% if card_index <= 2 %}
+      <span class="floating-stock">
+        Más vendidos
+      </span>
+    {% endif %}
+
+    <img
+      src="{{ product.featured_image | img_url: '600x600' }}"
+      alt="{{ product.title | escape }}"
+      loading="lazy"
+    >
+
+  </div>
+
+  <div class="custom-info">
+
+    {% comment %}
+      Genera un número de "reseñas" pseudo-aleatorio pero
+      consistente por producto, usando el ID real del
+      producto como semilla (evita mostrar siempre el mismo
+      número o requerir una app de reseñas externa).
+    {% endcomment %}
+    {% assign fake_reviews = product.id | modulo: 30 | plus: 20 %}
+
+    <div class="custom-stars">
+      ★★★★★ <span>({{ fake_reviews }})</span>
+    </div>
+
+    <h3 class="custom-title">
+      {{ product.title }}
+    </h3>
+
+    <div class="custom-price">
+      {% if product.compare_at_price > product.price %}
+        <span class="old">{{ product.compare_at_price | money }}</span>
+      {% endif %}
+      <span class="new">{{ product.price | money }}</span>
+    </div>
+
+    <a href="{{ product.url }}" class="custom-btn">
+      Lo quiero ❤️
+    </a>
+
+  </div>
+
+</div>
+
+
+{% comment %} ============================================
+  3. CSS FILE
+     assets/custom-product-showcase.css
+     Estilos del carrusel: grid con scroll horizontal tipo
+     "snap", tarjetas con efectos hover, badge animado, y
+     versión responsive para mobile (2 columnas fijas).
+============================================ {% endcomment %}
+
+{% comment %}
+<style>
+/* --- Custom Product Showcase CSS --- */
+
+@import url('https://fonts.googleapis.com/css2?family=Jost:wght@300;400;500;600&display=swap');
+
+.custom-products {
+  padding: 10px 60px 60px;
+  background: #0e0a0a;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Orb de fondo */
+.custom-products::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 800px;
+  height: 400px;
+  background: radial-gradient(ellipse, rgba(161,18,42,0.08) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.custom-products__title {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 5px;
+  text-transform: uppercase;
+  color: #c8913a;
+  margin-bottom: 20px;
+}
+
+.custom-carousel {
+  position: relative;
+  z-index: 2;
+  padding: 20px 0;
+}
+
+.custom-products__grid {
+  display: flex;
+  gap: 14px;
+  overflow-x: scroll;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  padding: 10px 5px;
+  margin: -18px -18px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.custom-products__grid::-webkit-scrollbar {
+  display: none;
+}
+
+.custom-card {
+  flex: 0 0 calc((100% - 42px) / 4);
+  max-width: calc((100% - 42px) / 4);
+  scroll-snap-align: start;
+}
+
+.custom-card {
+  background: linear-gradient(145deg, #1a1010, #130c0c);
+  border-radius: 18px;
+  border: 1px solid rgba(200,145,58,0.2);
+  box-shadow:
+    0 8px 24px rgba(0,0,0,0.4),
+    inset 0 1px 0 rgba(200,145,58,0.1);
+  overflow: hidden;
+  position: relative;
+  transition: transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+}
+
+.custom-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(200,145,58,0.5), transparent);
+  opacity: 0.5;
+  transition: opacity 0.3s ease;
+  z-index: 2;
+}
+
+.custom-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #A1122A, #c8913a, #A1122A, transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 2;
+}
+
+.custom-card:hover {
+  transform: translateY(-7px) scale(1.015);
+  border-color: rgba(200,145,58,0.45);
+  box-shadow:
+    0 20px 45px rgba(0,0,0,0.55),
+    0 0 0 1px rgba(200,145,58,0.2),
+    0 0 25px rgba(200,145,58,0.12),
+    0 0 40px rgba(200,145,58,0.07),
+    0 0 20px rgba(161,18,42,0.1);
+}
+
+.custom-card:hover::before { opacity: 1; }
+.custom-card:hover::after  { opacity: 1; }
+
+.floating-stock {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  color: #fff;
+  font-family: 'Jost', sans-serif;
+  font-size: 9px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(250, 23, 15, 0.45);
+  animation: floatPulse 2.6s ease-in-out infinite;
+  z-index: 5;
+}
+
+@keyframes floatPulse {
+  0%,100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+.custom-image {
+  padding: 10px;
+  background: linear-gradient(180deg, #1a1010, #130c0c);
+}
+
+.custom-image img {
+  width: 100%;
+  height: 250px;
+  object-fit: contain;
+  background: transparent;
+  border-radius: 12px;
+  transition: transform .3s ease, filter .3s ease;
+  filter: drop-shadow(0 8px 16px rgba(0,0,0,0.4));
+}
+
+.custom-card:hover .custom-image img {
+  transform: scale(1.06);
+  filter: drop-shadow(0 12px 24px rgba(161,18,42,0.3));
+}
+
+.custom-info { padding: 0px 10px 12px; }
+
+.custom-stars {
+  color: #c8913a;
+  font-size: 12px;
+  margin-bottom: 3px;
+  filter: drop-shadow(0 0 4px rgba(200,145,58,0.4));
+}
+
+.custom-stars span {
+  color: rgba(240,232,228,0.4);
+  font-family: 'Jost', sans-serif;
+  font-size: 10px;
+  font-weight: 300;
+  margin-left: 4px;
+}
+
+.custom-title {
+  font-family: 'Jost', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #f0e8e4;
+  margin: 3px 0 7px;
+  letter-spacing: 0.2px;
+}
+
+.custom-price {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.custom-price .old {
+  color: rgba(240,232,228,0.3);
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  font-weight: 300;
+  text-decoration: line-through;
+}
+
+.custom-price .new {
+  font-family: 'Jost', sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: #e8c97a;
+  text-shadow: 0 0 14px rgba(200,145,58,0.4);
+}
+
+.custom-btn {
+  display: block;
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  color: #fff;
+  text-align: center;
+  padding: 9px;
+  border-radius: 999px;
+  font-family: 'Jost', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-decoration: none;
+  border: 1px solid rgba(200,145,58,0.2);
+  box-shadow: 0 4px 14px rgba(161,18,42,.3);
+  transition: all .3s ease;
+}
+
+.custom-btn:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgb(161,18,42), rgb(200,26,26));
+  border-color: rgba(200,145,58,0.45);
+  box-shadow:
+    0 8px 20px rgba(161,18,42,.4),
+    0 0 14px rgba(200,145,58,0.12);
+  letter-spacing: 1.6px;
+}
+
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, rgb(95,14,28), rgb(161,18,42));
+  border: 1px solid rgba(200,145,58,0.3);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 50;
+  box-shadow:
+    0 6px 18px rgba(161,18,42,0.4),
+    0 0 0 1px rgba(200,145,58,0.1);
+  transition: all 0.3s ease;
+}
+
+.carousel-btn:hover {
+  border-color: rgba(200,145,58,0.55);
+  box-shadow:
+    0 10px 25px rgba(161,18,42,0.5),
+    0 0 15px rgba(200,145,58,0.15);
+  transform: translateY(-53%);
+}
+
+.carousel-btn.prev { left: -22px; }
+.carousel-btn.next { right: -22px; }
+
+@media (max-width: 768px) {
+
+  .custom-products {
+    padding: 22px 10px 34px;
+  }
+
+  .custom-products__grid {
+    gap: 8px;
+    padding: 10px 0;
+    margin: -10px -8px;
+  }
+
+  .custom-card {
+    flex: 0 0 calc((100% - 10px) / 2);
+    max-width: calc((100% - 10px) / 2);
+  }
+
+  .custom-image img { height: 260px; }
+
+  .custom-title { font-size: 11px; }
+
+  .custom-price .new { font-size: 13px; }
+
+  .custom-btn {
+    padding: 6px;
+    font-size: 10px;
+  }
+
+  .carousel-btn {
+    width: 33px;
+    height: 33px;
+    font-size: 15px;
+  }
+
+  .carousel-btn.prev { left: -9px; }
+  .carousel-btn.next { right: -9px; }
+
+  .custom-card:hover,
+  .custom-card:hover::after,
+  .custom-card:hover .custom-image img {
+    transform: none;
+    box-shadow: none;
+  }
+
+}
+</style>
+{% endcomment %}
