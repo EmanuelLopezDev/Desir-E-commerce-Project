@@ -1,0 +1,381 @@
+{% comment %}
+============================================================
+  GALERÍA FLOTANTE CARRUSEL — Carrusel de imágenes con
+  navegación táctil (swipe) y centrado dinámico
+============================================================
+  Descripción:
+  Sección de Shopify tipo "carrusel de galería" donde la
+  imagen activa se centra y agranda automáticamente. Permite
+  navegar con botones prev/next, dots (puntos) de navegación,
+  o deslizando con el dedo en móvil (swipe). El carrusel
+  recalcula su posición dinámicamente según el tamaño de
+  pantalla (resize).
+
+  Tecnologías: Liquid, JavaScript (vanilla, sin librerías),
+  CSS3 (animaciones, glassmorphism, responsive), Shopify
+  Schema con bloques repetibles (blocks) para agregar fotos
+  ilimitadas desde el editor de temas.
+
+  Puntos técnicos destacados:
+    - Manejo de eventos touch (touchstart/touchmove/touchend)
+      para detectar gestos de swipe horizontal.
+    - Cálculo dinámico de posición de scroll (offsetLeft,
+      offsetWidth) para centrar la slide activa.
+    - Generación de elementos (dots) por JavaScript en tiempo
+      de carga, según la cantidad de bloques configurados.
+    - Recalculo automático en el evento "resize" de la ventana.
+============================================================
+{% endcomment %}
+
+<section class="fgc-section">
+  <div class="fgc-wrapper">
+
+    <div class="fgc-track-outer" id="fgcOuter">
+      <div class="fgc-track" id="fgcTrack">
+
+        {% for block in section.blocks %}
+          {% if block.settings.image != blank %}
+          <div class="fgc-slide" {{ block.shopify_attributes }}>
+            <div class="fgc-card">
+              {{ block.settings.image | image_url: width: 600 | image_tag: loading: 'lazy' }}
+            </div>
+          </div>
+          {% endif %}
+        {% endfor %}
+
+      </div>
+
+      <button class="fgc-btn fgc-btn--prev" id="fgcPrev" aria-label="Anterior">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <button class="fgc-btn fgc-btn--next" id="fgcNext" aria-label="Siguiente">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
+      <div class="fgc-dots" id="fgcDots"></div>
+    </div>
+
+    <div class="fgc-orb fgc-orb--1"></div>
+    <div class="fgc-orb fgc-orb--2"></div>
+    <div class="fgc-orb fgc-orb--3"></div>
+  </div>
+</section>
+
+{% comment %}
+  Lógica del carrusel:
+  1. goTo(idx) — actualiza la slide activa, calcula el offset
+     necesario para centrarla en el contenedor, y mueve el
+     track con transform: translateX().
+  2. Eventos touch — detectan swipe horizontal (comparando
+     desplazamiento en X vs Y) para no interferir con el
+     scroll vertical normal de la página.
+  3. Dots — se generan dinámicamente según cuántas slides
+     existan, y se sincronizan con la slide activa.
+{% endcomment %}
+<script>
+(function(){
+  const track   = document.getElementById('fgcTrack');
+  const outer   = document.getElementById('fgcOuter');
+  const btnPrev = document.getElementById('fgcPrev');
+  const btnNext = document.getElementById('fgcNext');
+  const dotsEl  = document.getElementById('fgcDots');
+  if (!track) return;
+
+  const slides = Array.from(track.querySelectorAll('.fgc-slide'));
+  const total  = slides.length;
+  if (total === 0) return;
+
+  let current = Math.floor(total / 2);
+
+  slides.forEach((_, i) => {
+    const d = document.createElement('button');
+    d.className = 'fgc-dot';
+    d.setAttribute('aria-label', 'Foto ' + (i + 1));
+    d.addEventListener('click', () => goTo(i));
+    dotsEl.appendChild(d);
+  });
+
+  function updateDots() {
+    dotsEl.querySelectorAll('.fgc-dot').forEach((d, i) =>
+      d.classList.toggle('fgc-dot-active', i === current)
+    );
+  }
+
+  function goTo(idx) {
+    current = (idx + total) % total;
+    slides.forEach(s => s.classList.remove('fgc-active'));
+    slides[current].classList.add('fgc-active');
+
+    const slideW = slides[current].offsetWidth;
+    const wrapW  = outer.offsetWidth;
+    const rawOff = slides[current].offsetLeft - (wrapW / 2) + (slideW / 2);
+    const trackW = track.scrollWidth;
+    const offset = Math.max(0, Math.min(rawOff, trackW - wrapW));
+
+    track.style.transform = `translateX(-${offset}px)`;
+    updateDots();
+  }
+
+  btnPrev.addEventListener('click', () => goTo(current - 1));
+  btnNext.addEventListener('click', () => goTo(current + 1));
+
+  let touchStartX = 0;
+  let touchStartY = 0;
+  let isDragging  = false;
+
+  outer.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    isDragging  = true;
+  }, { passive: true });
+
+  outer.addEventListener('touchmove', (e) => {
+    if (!isDragging) return;
+    const dx = e.touches[0].clientX - touchStartX;
+    const dy = e.touches[0].clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy)) e.preventDefault();
+  }, { passive: false });
+
+  outer.addEventListener('touchend', (e) => {
+    if (!isDragging) return;
+    const dx = touchStartX - e.changedTouches[0].clientX;
+    const dy = touchStartY - e.changedTouches[0].clientY;
+    isDragging = false;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      dx > 0 ? goTo(current + 1) : goTo(current - 1);
+    }
+  }, { passive: true });
+
+  requestAnimationFrame(() => goTo(current));
+  window.addEventListener('resize', () => goTo(current));
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Galería Flotante Carrusel",
+  "max_blocks": 20,
+  "blocks": [
+    {
+      "type": "foto",
+      "name": "Foto",
+      "settings": [
+        {
+          "type": "image_picker",
+          "id": "image",
+          "label": "Imagen"
+        }
+      ]
+    }
+  ],
+  "presets": [
+    {
+      "name": "Galería Flotante Carrusel",
+      "blocks": [
+        { "type": "foto" },
+        { "type": "foto" },
+        { "type": "foto" }
+      ]
+    }
+  ]
+}
+{% endschema %}
+
+{% comment %}
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600&family=Jost:wght@300;400;500&display=swap');
+
+.fgc-section {
+  padding: 25px 20px;
+  background: #0e0a0a;
+}
+
+.fgc-wrapper {
+  position: relative;
+  overflow: hidden;
+  width: 88%;
+  max-width: 1300px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #0e0a0a 0%, #150d0d 50%, #0e0a0a 100%);
+  border-radius: 38px;
+  padding: 40px 60px 40px;
+  border: 1px solid rgba(200,145,58,0.3);
+  box-shadow:
+    0 20px 50px rgba(0,0,0,.5),
+    0 0 0 1px rgba(200,145,58,0.08),
+    inset 0 1px 0 rgba(200,145,58,0.15),
+    inset 0 0 80px rgba(161,18,42,0.06);
+  transition: transform .55s cubic-bezier(.22,.61,.36,1),
+              box-shadow .55s cubic-bezier(.22,.61,.36,1);
+}
+
+.fgc-wrapper:hover {
+  transform: translateY(-6px) scale(1.005);
+  box-shadow:
+    0 30px 70px rgba(0,0,0,.6),
+    0 0 0 1px rgba(200,145,58,0.28),
+    inset 0 1px 0 rgba(200,145,58,0.2),
+    0 0 50px rgba(161,18,42,.15);
+}
+
+.fgc-wrapper::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 10%; right: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, #c8913a, #A1122A, #c8913a, transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 3;
+}
+.fgc-wrapper:hover::after { opacity: 1; }
+
+.fgc-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.fgc-orb--1 {
+  width: 500px; height: 500px;
+  background: radial-gradient(ellipse, rgba(161,18,42,0.14) 0%, transparent 70%);
+  top: -200px; left: -100px;
+}
+.fgc-orb--2 {
+  width: 400px; height: 400px;
+  background: radial-gradient(ellipse, rgba(200,145,58,0.09) 0%, transparent 70%);
+  top: -150px; right: -80px;
+}
+.fgc-orb--3 {
+  width: 350px; height: 350px;
+  background: radial-gradient(ellipse, rgba(161,18,42,0.08) 0%, transparent 70%);
+  bottom: -150px; left: 50%;
+  transform: translateX(-50%);
+}
+
+.fgc-track-outer {
+  position: relative;
+  z-index: 2;
+  overflow: hidden;
+}
+
+.fgc-track {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  transition: transform 0.55s cubic-bezier(.22,.61,.36,1);
+  padding: 28px 0 30px;
+  will-change: transform;
+}
+
+.fgc-slide {
+  flex: 0 0 26%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: transform 0.55s cubic-bezier(.22,.61,.36,1),
+              opacity  0.55s ease;
+  opacity: 0.55;
+  transform: scale(0.86) translateY(10px);
+}
+
+.fgc-slide.fgc-active {
+  flex: 0 0 34%;
+  opacity: 1;
+  transform: scale(1) translateY(0px);
+}
+
+.fgc-card {
+  width: 100%;
+  border-radius: 28px;
+  overflow: hidden;
+  border: 1px solid rgba(200,145,58,0.35);
+  box-shadow:
+    0 18px 50px rgba(161,18,42,.35),
+    0 4px 14px rgba(0,0,0,.65),
+    inset 0 1px 0 rgba(200,145,58,0.12);
+  background: #0e0a0a;
+}
+
+.fgc-slide.fgc-active .fgc-card {
+  border-color: rgba(200,145,58,0.65);
+  box-shadow:
+    0 24px 65px rgba(161,18,42,.5),
+    0 6px 20px rgba(0,0,0,.7),
+    0 0 40px rgba(200,145,58,0.18),
+    inset 0 1px 0 rgba(200,145,58,0.25);
+  animation: fgcFloat 4.5s ease-in-out infinite;
+}
+
+@keyframes fgcFloat {
+  0%,100% { transform: translateY(0px); }
+  50%     { transform: translateY(-10px); }
+}
+
+.fgc-card img {
+  width: 100%;
+  aspect-ratio: 4/4;
+  object-fit: cover;
+  display: block;
+}
+
+.fgc-btn {
+  position: absolute;
+  top: 50%; transform: translateY(-50%);
+  z-index: 10;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(200,145,58,0.4);
+  background: rgba(14,10,10,0.85);
+  color: #c8913a;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: background .3s, border-color .3s, transform .3s;
+  backdrop-filter: blur(8px);
+}
+.fgc-btn:hover {
+  background: rgba(200,145,58,0.15);
+  border-color: rgba(200,145,58,0.8);
+  transform: translateY(-50%) scale(1.1);
+}
+.fgc-btn--prev { left: 4px; }
+.fgc-btn--next { right: 4px; }
+
+.fgc-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0 20px;
+  margin-top: 4px;
+}
+.fgc-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(200,145,58,0.3);
+  border: 1px solid rgba(200,145,58,0.4);
+  cursor: pointer;
+  transition: background .3s, transform .3s;
+  padding: 0;
+}
+.fgc-dot.fgc-dot-active {
+  background: #c8913a;
+  transform: scale(1.35);
+}
+
+@media (min-width: 1400px) {
+  .fgc-wrapper { padding: 44px 70px; }
+}
+
+@media (max-width: 768px) {
+  .fgc-wrapper {
+    padding: 28px 14px;
+    border-radius: 28px;
+    width: 92%;
+  }
+  .fgc-slide            { flex: 0 0 60%; }
+  .fgc-slide.fgc-active { flex: 0 0 68%; }
+  .fgc-track            { gap: 14px; padding: 18px 0 30px; }
+  .fgc-btn              { display: none; }
+}
+</style>
+{% endcomment %}
